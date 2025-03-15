@@ -18,6 +18,9 @@ class AplicacionGabinetes:
         self.piezas = []
         self.archivo_actual = None
         
+        # Configuración para el autoguardado
+        self.archivo_temp = "temp_gabinetes.json"  # Archivo temporal predeterminado
+        
         # Crear pestañas principales
         self.notebook_principal = ttk.Notebook(self.root)
         self.notebook_principal.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -39,6 +42,9 @@ class AplicacionGabinetes:
         # Configurar la pestaña de ingreso de datos
         self.setup_tab_ingreso()
         self.setup_tab_nesting()
+        
+        # Verificar si hay un proyecto anterior y preguntar si desea cargarlo
+        self.cargar_proyecto_anterior()
 
     def setup_tab_nesting(self):
         """Configura la pestaña de Nesting"""
@@ -323,14 +329,25 @@ class AplicacionGabinetes:
         self.setup_frame_editar_pieza()    
 
     def setup_canvas_frontal_gabinete(self):
-        # Visualización 2D del gabinete seleccionado (usando matplotlib)
-        self.fig = plt.Figure(figsize=(3, 3), dpi=75)
+        """Configura el canvas para la vista frontal del gabinete"""
+        # Crear figura de matplotlib
+        self.fig = plt.Figure(figsize=(4, 5), dpi=80)
         self.ax = self.fig.add_subplot(111)
-        self.ax.set_title("Vista Previa 2D")
-        self.ax.set_xlabel("Ancho (cm)")
-        self.ax.set_ylabel("Alto (cm)")
-        self.ax.grid(False)
         
+        # Configurar el título y etiquetas de los ejes
+        self.ax.set_title("Vista Frontal del Gabinete")
+        self.ax.set_xlabel("")
+        self.ax.set_ylabel("")
+        
+        # Quitar los números de los ejes
+        self.ax.set_xticks([])  # Quitar números del eje X
+        self.ax.set_yticks([])  # Quitar números del eje Y
+        self.ax.set_frame_on(False)  # Quitar el marco del gráfico
+        
+        # Establecer la relación de aspecto para que sea igual (evitar estiramiento)
+        self.ax.set_aspect('equal', adjustable='box')
+        
+        # Dibujar el canvas en la pestaña correspondiente
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.tab_frontal_gabinete)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -735,6 +752,21 @@ class AplicacionGabinetes:
         except ValueError:
             pass  # Manejar errores si los valores ingresados no son numéricos    
         
+    def calcular_piezas(self, gabinete):
+        """
+        Calcula las piezas necesarias para un gabinete según su estilo.
+        """
+        estilo = gabinete["Estilo"]
+
+        if estilo == "Base_normal":
+            return self.calcular_piezas_base_normal(gabinete)
+        elif estilo == "Base_Drawer":
+            return self.calcular_piezas_base_drawer(gabinete)  # Ya existe en el código
+        elif estilo == "Wall_cabinet":
+            return self.calcular_piezas_wall_cabinet(gabinete)  # Lo implementaremos después
+        else:
+            return []  # Estilo no reconocido
+
     def agregar_gabinete(self):
         try:
             # Validar y obtener datos
@@ -752,6 +784,8 @@ class AplicacionGabinetes:
             
             # Actualizar UI
             self.actualizar_ui_despues_de_agregar(gabinete, piezas_gabinete)
+            
+            self.autoguardar_datos()
             
             # Limpiar campos
             self.limpiar_campos_ingreso()
@@ -802,7 +836,8 @@ class AplicacionGabinetes:
         self.entry_ancho.delete(0, tk.END)
         self.entry_profundidad.delete(0, tk.END)
     
-    def calcular_piezas(self, gabinete):
+    def calcular_piezas_base_drawer(self, gabinete):
+        """Calcula las piezas necesarias para un gabinete de estilo Base_Drawer"""
         gap = 0.125
         toe_kick = 4
         espacio_entre_gavetas = 0.25
@@ -814,7 +849,15 @@ class AplicacionGabinetes:
         space = 1.26
         rows = 2
         dia = 0.25
-        drawer_mount = 3  # Valor predeterminado para el montaje de gavetas
+        
+        # Obtener el valor de drawer_mount según la selección del combobox
+        slider = gabinete.get("Slider", "Undermount")  # Valor predeterminado: Undermount
+        if slider == "Undermount":
+            drawer_mount = 0.375
+        elif slider == "Sidemount":
+            drawer_mount = 1
+        else:
+            drawer_mount = 3  # Valor predeterminado si no se selecciona nada
         
         cantidad_gavetas = gabinete.get("num_gavetas", 1)
         altura_disponible = gabinete["Alto"] - toe_kick - ((cantidad_gavetas - 1) * espacio_entre_gavetas)
@@ -828,11 +871,11 @@ class AplicacionGabinetes:
                 alturas_gavetas.append(altura_disponible / cantidad_gavetas)
         
         piezas = [
-            {"nombre": "Lateral Izquierdo", "ancho": gabinete["Profundidad"] -1, "alto": gabinete["Alto"],
-             "orificios_shelf": {"cantidad": total, "diametro": dia, "filas": rows, "distancia_frontal": front, "distancia_trasera": rear, "separacion": space, "distancia_inferior": botton, "distancia_superior": top}},
-            {"nombre": "Lateral Derecho", "ancho": gabinete["Profundidad"] -1, "alto": gabinete["Alto"],
-             "orificios_shelf": {"cantidad": total, "diametro": dia, "filas": rows, "distancia_frontal": front, "distancia_trasera": rear, "separacion": space, "distancia_inferior": botton, "distancia_superior": top}},
-            {"nombre": "Base", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": gabinete["Profundidad"] -1},
+            {"nombre": "Lateral Izquierdo", "ancho": gabinete["Profundidad"] - 1, "alto": gabinete["Alto"],
+            "orificios_shelf": {"cantidad": total, "diametro": dia, "filas": rows, "distancia_frontal": front, "distancia_trasera": rear, "separacion": space, "distancia_inferior": botton, "distancia_superior": top}},
+            {"nombre": "Lateral Derecho", "ancho": gabinete["Profundidad"] - 1, "alto": gabinete["Alto"],
+            "orificios_shelf": {"cantidad": total, "diametro": dia, "filas": rows, "distancia_frontal": front, "distancia_trasera": rear, "separacion": space, "distancia_inferior": botton, "distancia_superior": top}},
+            {"nombre": "Base", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": gabinete["Profundidad"] - 1},
             {"nombre": "Trasera", "ancho": gabinete["Ancho"], "alto": gabinete["Alto"] - gabinete["Espesor"]},
             {"nombre": "Under Drawer Rail Superior", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": 3},
             {"nombre": "Upper Drawer Rail Superior", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": 3},
@@ -859,38 +902,168 @@ class AplicacionGabinetes:
             profundidad_box_drawer = 12
         elif gabinete["Profundidad"] > 11:
             profundidad_box_drawer = 9
-            
+                
         # Agregar las cajas de gavetas dinámicamente
-        for i, _ in enumerate(alturas_gavetas):
+        for i, altura_gaveta in enumerate(alturas_gavetas):
+            # Determinar la altura de la Box Drawer
+            if i == len(alturas_gavetas) - 1:  # Última gaveta
+                altura_box_drawer = altura_gaveta - 2.125
+            else:  # Las demás gavetas
+                altura_box_drawer = altura_gaveta - 1.75
+            
             piezas.append({
                 "nombre": f"Box Drawer {i+1}",
                 "ancho": gabinete["Ancho"] - drawer_mount - (gabinete["Espesor"] * 2),
-                "alto": 4,
+                "alto": altura_box_drawer,
                 "profundidad": profundidad_box_drawer
             })
-                
+                    
         return piezas
     
-    def calcular_piezas_basico(self, gabinete):
-        # Método básico para calcular piezas de gabinetes que no son Base_Drawer
-        piezas = [
-            {"nombre": "Lateral Izquierdo", "ancho": gabinete["Profundidad"] - 1, "alto": gabinete["Alto"]},
-            {"nombre": "Lateral Derecho", "ancho": gabinete["Profundidad"] - 1, "alto": gabinete["Alto"]},
-            {"nombre": "Base", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": gabinete["Profundidad"] - 1},
-            {"nombre": "Techo", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": gabinete["Profundidad"] - 1},
-            {"nombre": "Trasera", "ancho": gabinete["Ancho"], "alto": gabinete["Alto"] - gabinete["Espesor"]},
-        ]
-        
-        # Si es un gabinete de pared, añadir estantes
-        if gabinete["Estilo"] == "Wall_cabinet":
-            piezas.append({"nombre": "Estante", "ancho": gabinete["Ancho"] - 2 * gabinete["Espesor"], "alto": gabinete["Profundidad"] - 2})
-        
-        # Si es un gabinete base normal, añadir puerta
-        if gabinete["Estilo"] == "Base_normal":
-            piezas.append({"nombre": "Puerta", "ancho": gabinete["Ancho"], "alto": gabinete["Alto"] - 4})
-            piezas.append({"nombre": "Toe Kick", "ancho": gabinete["Ancho"], "alto": 4})
-        
+    def calcular_piezas_base_normal(self, gabinete):
+        """
+        Calcula las piezas necesarias para un gabinete de estilo "Base_normal".
+        Incluye una gaveta en la parte superior, puertas en la parte inferior,
+        y la caja de la gaveta (Box Drawer).
+        """
+        piezas = []
+
+        # Dimensiones del gabinete
+        ancho = gabinete["Ancho"]
+        alto = gabinete["Alto"]
+        profundidad = gabinete["Profundidad"]
+        grosor = gabinete["Espesor"]
+
+        # Obtener el valor de drawer_mount según la selección del combobox
+        slider = gabinete.get("Slider", "Undermount")  # Valor predeterminado: Undermount
+        if slider == "Undermount":
+            drawer_mount = 0.375
+        elif slider == "Sidemount":
+            drawer_mount = 1
+        else:
+            drawer_mount = 3  # Valor predeterminado si no se selecciona nada
+
+        # Piezas básicas del gabinete
+        piezas.extend([
+            {"nombre": "Lateral Izquierdo", "ancho": profundidad - 1, "alto": alto},
+            {"nombre": "Lateral Derecho", "ancho": profundidad - 1, "alto": alto},
+            {"nombre": "Base", "ancho": ancho - 2 * grosor, "alto": profundidad - 1},
+            {"nombre": "Techo", "ancho": ancho - 2 * grosor, "alto": profundidad - 1},
+            {"nombre": "Trasera", "ancho": ancho, "alto": alto - grosor},
+        ])
+
+        # Toe Kick (zócalo)
+        piezas.append({"nombre": "Toe Kick", "ancho": ancho, "alto": 4})
+
+        # Gaveta superior
+        altura_gaveta = gabinete.get("altura_gaveta", 6)  # Usar el valor guardado o 6 cm por defecto
+        piezas.append({
+            "nombre": "Gaveta Superior",
+            "ancho": ancho - 0.125,  # Ajuste para el espacio entre gavetas
+            "alto": altura_gaveta,
+            "profundidad": profundidad - 1  # Profundidad de la gaveta
+        })
+
+        # Box Drawer (caja de la gaveta)
+        # Determinar profundidad para la caja de la gaveta
+        profundidad_box_drawer = 21  # Valor predeterminado
+        if profundidad > 26:
+            profundidad_box_drawer = 24
+        elif profundidad > 23:
+            profundidad_box_drawer = 21
+        elif profundidad > 20:
+            profundidad_box_drawer = 18
+        elif profundidad > 17:
+            profundidad_box_drawer = 15
+        elif profundidad > 14:
+            profundidad_box_drawer = 12
+        elif profundidad > 11:
+            profundidad_box_drawer = 9
+
+        # Calcular la altura de la Box Drawer restando 1.75 a la altura de la Gaveta Superior
+        altura_box_drawer = altura_gaveta - 1.75
+
+        # Agregar la caja de la gaveta
+        piezas.append({
+            "nombre": "Box Drawer",
+            "ancho": ancho - drawer_mount - (grosor * 2),  # Ajuste para el montaje de la gaveta
+            "alto": altura_box_drawer,  # Altura calculada
+            "profundidad": profundidad_box_drawer
+        })
+
+        # Puertas inferiores
+        altura_puerta = alto - 4 - altura_gaveta  # Restando el toe kick y la gaveta
+        if ancho > 18:
+            # Si el ancho es mayor a 18", agregar dos puertas
+            ancho_puerta = (ancho / 2) - 0.125  # Ajuste para el espacio entre puertas
+            piezas.extend([
+                {"nombre": "Puerta Izquierda", "ancho": ancho_puerta, "alto": altura_puerta},
+                {"nombre": "Puerta Derecha", "ancho": ancho_puerta, "alto": altura_puerta},
+            ])
+        else:
+            # Si el ancho es 18" o menor, agregar una sola puerta
+            piezas.append({"nombre": "Puerta", "ancho": ancho, "alto": altura_puerta})
+
         return piezas
+
+    def calcular_piezas_wall_cabinet(self, gabinete):
+        """
+        Calcula las piezas necesarias para un gabinete de estilo "Wall_cabinet".
+        Incluye puertas, estantes y piezas básicas.
+        """
+        piezas = []
+
+        # Dimensiones del gabinete
+        ancho = gabinete["Ancho"]
+        alto = gabinete["Alto"]
+        profundidad = gabinete["Profundidad"]
+        grosor = gabinete["Espesor"]
+
+        # Piezas básicas del gabinete
+        piezas.extend([
+            {"nombre": "Lateral Izquierdo", "ancho": profundidad - 1, "alto": alto},
+            {"nombre": "Lateral Derecho", "ancho": profundidad - 1, "alto": alto},
+            {"nombre": "Base", "ancho": ancho - 2 * grosor, "alto": profundidad - 1},
+            {"nombre": "Techo", "ancho": ancho - 2 * grosor, "alto": profundidad - 1},
+            {"nombre": "Trasera", "ancho": ancho, "alto": alto - grosor},
+        ])
+
+        # Estante (fijo en la mitad del gabinete)
+        altura_estante = alto / 2  # Estante en la mitad del gabinete
+        piezas.append({
+            "nombre": "Estante",
+            "ancho": ancho - 2 * grosor,  # Ajuste para el grosor del material
+            "alto": profundidad - 2,  # Profundidad del estante
+        })
+
+        # Puertas
+        if ancho > 18:  # Si el ancho es mayor a 18", agregar dos puertas
+            ancho_puerta = (ancho / 2) - 0.125  # Ajuste para el espacio entre puertas
+            piezas.extend([
+                {"nombre": "Puerta Izquierda", "ancho": ancho_puerta, "alto": alto},
+                {"nombre": "Puerta Derecha", "ancho": ancho_puerta, "alto": alto},
+            ])
+        else:  # Si el ancho es 18" o menor, agregar una sola puerta
+            piezas.append({"nombre": "Puerta", "ancho": ancho, "alto": alto})
+
+        return piezas
+
+    def autoguardar_datos(self):
+        """Guarda automáticamente los datos en el archivo temporal"""
+        # Preparar datos
+        datos = {
+            "gabinetes": self.gabinetes,
+            "piezas": self.piezas
+        }
+
+        try:
+            with open(self.archivo_temp, "w") as archivo:
+                json.dump(datos, archivo, indent=4)
+            print(f"Autoguardado: {len(self.gabinetes)} gabinetes guardados en {self.archivo_temp}")
+            return True
+        except Exception as e:
+            print(f"Error al autoguardar: {str(e)}")
+            return False
     
     def guardar_datos(self):
         if not self.gabinetes:
@@ -989,25 +1162,49 @@ class AplicacionGabinetes:
         # Limpiar figura actual
         self.ax.clear()
         
-        # Dibujar el gabinete en 2D (vista frontal)
+        # Definir variables de espacio
+        espacio_lateral = 0.0625  # Espacio lateral a cada lado
+        gap_vertical = 0.125       # Espacio vertical entre gavetas y puertas
+        gap_horizontal = 0.125     # Espacio horizontal entre puertas
+        
+        # Obtener dimensiones del gabinete
         ancho = gabinete["Ancho"]
         alto = gabinete["Alto"]
         
-        # Dibujar el contorno del gabinete
-        self.ax.add_patch(plt.Rectangle((0, 0), ancho, alto, fill=False, color='black'))
+        # Configurar los límites de los ejes
+        self.ax.set_xlim(0, ancho)
+        self.ax.set_ylim(0, alto)
         
-        # Si es un gabinete con gavetas, dibujarlas
+        # Quitar los números de los ejes
+        self.ax.set_xticks([])  # Quitar números del eje X
+        self.ax.set_yticks([])  # Quitar números del eje Y
+        
+        # Establecer la relación de aspecto para que sea igual (evitar estiramiento)
+        self.ax.set_aspect('equal', adjustable='box')
+        
+        # Dibujar el contorno del gabinete
+        self.ax.add_patch(plt.Rectangle((0, 0), ancho, alto, fill=False, color='black', linewidth=2))
+        
+        # Agregar etiquetas de dimensiones
+        self.ax.text(ancho / 2, -1, f"Ancho: {ancho} cm", 
+                    horizontalalignment='center', verticalalignment='top', fontsize=10)
+        self.ax.text(-2, alto / 2, f"Alto: {alto} cm", 
+                    rotation=90, horizontalalignment='right', verticalalignment='center', fontsize=10)
+    
+        
+        # Si es un gabinete con gavetas (Base_Drawer), dibujarlas
         if gabinete["Estilo"] == "Base_Drawer":
             num_gavetas = gabinete.get("num_gavetas", 1)
             
             # Calcular la posición del toe kick
             toe_kick_height = 4  # Altura estándar del toe kick
-            y_start = toe_kick_height
+            y_start = alto  # Comenzar desde la parte superior
             
-            # Dibujar toe kick
-            self.ax.add_patch(plt.Rectangle((0, 0), ancho, toe_kick_height, fill=True, color='gray', alpha=0.5))
+            # Dibujar toe kick con contorno
+            self.ax.add_patch(plt.Rectangle((0, 0), ancho, toe_kick_height, 
+                            facecolor='white', edgecolor='black', linewidth=2))
             
-            # Dibujar gavetas
+            # Dibujar gavetas desde arriba hacia abajo
             for i in range(num_gavetas):
                 altura_key = f"high_drawer_{i}"
                 
@@ -1017,51 +1214,122 @@ class AplicacionGabinetes:
                     # Calcular altura proporcional si no está especificada
                     altura_gaveta = (alto - toe_kick_height) / num_gavetas
                 
-                # Dibujar gaveta
-                self.ax.add_patch(plt.Rectangle((0.5, y_start), ancho - 1, altura_gaveta, fill=True, color='lightblue', alpha=0.7))
+                # Ajustar la posición de la gaveta (comenzar desde arriba)
+                y_start -= altura_gaveta
+                
+                # Dibujar gaveta con contorno
+                self.ax.add_patch(plt.Rectangle((espacio_lateral, y_start), 
+                                ancho - 2 * espacio_lateral, altura_gaveta, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                
+                # Dibujar rectángulos en los bordes de la gaveta
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral, y_start, 
+                                                ancho - 2 * espacio_lateral, altura_gaveta)
                 
                 # Agregar texto de número de gaveta
                 self.ax.text(ancho/2, y_start + altura_gaveta/2, f"Gaveta {i+1}", 
                         horizontalalignment='center', verticalalignment='center')
                 
-                # Actualizar posición para la siguiente gaveta
-                y_start += altura_gaveta + 0.25  # Agregar espacio entre gavetas
+                # Agregar espacio entre gavetas (gap_vertical)
+                y_start -= gap_vertical
         
-        # Si es un gabinete base normal, dibujar puerta
+        # Si es un gabinete base normal (Base_normal), dibujar gaveta superior y puertas inferiores
         elif gabinete["Estilo"] == "Base_normal":
-            toe_kick_height = 4
-            self.ax.add_patch(plt.Rectangle((0, 0), ancho, toe_kick_height, fill=True, color='gray', alpha=0.5))
+            toe_kick_height = 4  # Altura del toe kick
+            altura_gaveta = gabinete.get("altura_gaveta", 6)  # Altura de la gaveta superior
             
-            # Dibujar puerta
-            self.ax.add_patch(plt.Rectangle((0.5, toe_kick_height), ancho - 1, alto - toe_kick_height, 
-                                            fill=True, color='tan', alpha=0.7))
-            self.ax.text(ancho/2, (alto - toe_kick_height)/2 + toe_kick_height, "Puerta", 
+            # Dibujar toe kick con contorno
+            self.ax.add_patch(plt.Rectangle((0, 0), ancho, toe_kick_height, 
+                            facecolor='white', edgecolor='black', linewidth=2))
+            
+            # Dibujar gaveta superior con contorno
+            self.ax.add_patch(plt.Rectangle((espacio_lateral, alto - altura_gaveta), 
+                            ancho - 2 * espacio_lateral, altura_gaveta, 
+                            facecolor='white', edgecolor='black', linewidth=1))
+            
+            # Dibujar rectángulos en los bordes de la gaveta superior
+            self._dibujar_bordes_gaveta_puerta(espacio_lateral, alto - altura_gaveta, 
+                                            ancho - 2 * espacio_lateral, altura_gaveta)
+            
+            # Agregar texto de gaveta superior
+            self.ax.text(ancho/2, alto - altura_gaveta/2, "Gaveta Superior", 
                     horizontalalignment='center', verticalalignment='center')
+            
+            # Dibujar puertas inferiores
+            altura_puerta = alto - toe_kick_height - altura_gaveta - gap_vertical  # Altura de las puertas
+            if ancho > 18:  # Si el ancho es mayor a 18", dibujar dos puertas
+                ancho_puerta = (ancho - 2 * espacio_lateral - gap_horizontal) / 2  # Ancho de cada puerta
+                # Puerta izquierda
+                self.ax.add_patch(plt.Rectangle((espacio_lateral, toe_kick_height), 
+                                ancho_puerta, altura_puerta, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral, toe_kick_height, 
+                                                ancho_puerta, altura_puerta)
+                self.ax.text(espacio_lateral + ancho_puerta/2, toe_kick_height + altura_puerta/2, 
+                        "Puerta Izq.", horizontalalignment='center', verticalalignment='center')
+                # Puerta derecha
+                self.ax.add_patch(plt.Rectangle((espacio_lateral + ancho_puerta + gap_horizontal, toe_kick_height), 
+                                ancho_puerta, altura_puerta, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral + ancho_puerta + gap_horizontal, toe_kick_height, 
+                                                ancho_puerta, altura_puerta)
+                self.ax.text(espacio_lateral + ancho_puerta * 1.5 + gap_horizontal, toe_kick_height + altura_puerta/2, 
+                        "Puerta Der.", horizontalalignment='center', verticalalignment='center')
+            else:  # Si el ancho es 18" o menor, dibujar una sola puerta
+                self.ax.add_patch(plt.Rectangle((espacio_lateral, toe_kick_height), 
+                                ancho - 2 * espacio_lateral, altura_puerta, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral, toe_kick_height, 
+                                                ancho - 2 * espacio_lateral, altura_puerta)
+                self.ax.text(ancho/2, toe_kick_height + altura_puerta/2, "Puerta", 
+                        horizontalalignment='center', verticalalignment='center')
         
-        # Si es un gabinete de pared, dibujar puerta y estante
+        # Si es un gabinete de pared (Wall_cabinet), dibujar puertas y estante
         elif gabinete["Estilo"] == "Wall_cabinet":
-            # Dibujar puerta
-            self.ax.add_patch(plt.Rectangle((0.5, 0), ancho - 1, alto, fill=True, color='lightyellow', alpha=0.7))
-            
-            # Dibujar línea de estante (aproximadamente en la mitad)
-            self.ax.plot([0.5, ancho - 0.5], [alto/2, alto/2], 'k--')
-            
-            self.ax.text(ancho/2, alto/2 + alto/4, "Puerta", 
-                    horizontalalignment='center', verticalalignment='center')
-            self.ax.text(ancho/2, alto/4, "Estante", 
-                    horizontalalignment='center', verticalalignment='center')
+            # Dibujar puertas
+            if ancho > 18:  # Si el ancho es mayor a 18", dibujar dos puertas
+                ancho_puerta = (ancho - 2 * espacio_lateral - gap_horizontal) / 2  # Ancho de cada puerta
+                # Puerta izquierda
+                self.ax.add_patch(plt.Rectangle((espacio_lateral, 0), ancho_puerta, alto, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral, 0, ancho_puerta, alto)
+                self.ax.text(espacio_lateral + ancho_puerta/2, alto/2, "Puerta Izq.", 
+                        horizontalalignment='center', verticalalignment='center')
+                # Puerta derecha
+                self.ax.add_patch(plt.Rectangle((espacio_lateral + ancho_puerta + gap_horizontal, 0), 
+                                ancho_puerta, alto, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral + ancho_puerta + gap_horizontal, 0, 
+                                                ancho_puerta, alto)
+                self.ax.text(espacio_lateral + ancho_puerta * 1.5 + gap_horizontal, alto/2, "Puerta Der.", 
+                        horizontalalignment='center', verticalalignment='center')
+            else:  # Si el ancho es 18" o menor, dibujar una sola puerta
+                self.ax.add_patch(plt.Rectangle((espacio_lateral, 0), ancho - 2 * espacio_lateral, alto, 
+                                facecolor='white', edgecolor='black', linewidth=1))
+                self._dibujar_bordes_gaveta_puerta(espacio_lateral, 0, ancho - 2 * espacio_lateral, alto)
+                self.ax.text(ancho/2, alto/2, "Puerta", 
+                        horizontalalignment='center', verticalalignment='center')
         
         # Configurar límites y etiquetas
-        self.ax.set_xlim(-1, ancho + 1)
-        self.ax.set_ylim(-1, alto + 1)
         self.ax.set_title(f"Vista Previa - {gabinete['Estilo']} ({gabinete['ID']})")
-        self.ax.set_xlabel("Ancho (cm)")
-        self.ax.set_ylabel("Alto (cm)")
-        self.ax.grid(True)
+        self.ax.grid(False)
         
         # Actualizar canvas
         self.canvas.draw()
+    
+    def _dibujar_bordes_gaveta_puerta(self, x, y, ancho, alto):
+        """Dibuja los bordes (rectángulos) alrededor de una gaveta o puerta"""
+        # Rectángulos en los lados izquierdo y derecho (2.5 cm de ancho)
+        self.ax.add_patch(plt.Rectangle((x, y), 2.5, alto, fill=False, color='black', alpha=0.5))  # Izquierdo
+        self.ax.add_patch(plt.Rectangle((x + ancho - 2.5, y), 2.5, alto, fill=False, color='black'))  # Derecho
         
+        # Rectángulos en los bordes superior e inferior
+        borde_superior_inferior_ancho = 1.5 if alto < 7 else 2.5  # Ancho del borde superior e inferior
+        self.ax.add_patch(plt.Rectangle((x + 2.5, y + alto - borde_superior_inferior_ancho), 
+                        ancho - 5, borde_superior_inferior_ancho, fill=False, color='black'))  # Superior
+        self.ax.add_patch(plt.Rectangle((x + 2.5, y), ancho - 5, borde_superior_inferior_ancho, 
+                        fill=False, color='black'))  # Inferior
+            
     def actualizar_detalles(self, gabinete, piezas):
         """Actualiza el texto de detalles del gabinete seleccionado"""
         # Limpiar texto actual
@@ -1246,21 +1514,28 @@ class AplicacionGabinetes:
         entry_grosor.grid(row=4, column=1, padx=5, pady=5, sticky=tk.W)
         entry_grosor.insert(0, str(gabinete_seleccionado["Espesor"]))
         
-        # Opciones adicionales para gabinetes con gavetas
+        # Frame para opciones de gavetas (inicialmente oculto)
         frame_gavetas = ttk.LabelFrame(frame_edicion, text="Opciones de Gavetas")
         frame_gavetas.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
         
+        # Combobox para seleccionar el estilo de slider
+        ttk.Label(frame_gavetas, text="Estilo de Slider:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        combo_slider = ttk.Combobox(frame_gavetas, values=["Undermount", "Sidemount"], width=10)
+        combo_slider.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        combo_slider.set(gabinete_seleccionado.get("Slider", "Undermount"))  # Cargar valor actual
+        
+        # Si es un gabinete con gavetas (Base_Drawer), mostrar el frame de gavetas
         if gabinete_seleccionado["Estilo"] == "Base_Drawer":
             frame_gavetas.grid()  # Mostrar frame
             
-            ttk.Label(frame_gavetas, text="Número de Gavetas:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+            ttk.Label(frame_gavetas, text="Número de Gavetas:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
             entry_num_gavetas = ttk.Spinbox(frame_gavetas, from_=1, to=4, width=5)
-            entry_num_gavetas.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+            entry_num_gavetas.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
             entry_num_gavetas.set(gabinete_seleccionado.get("num_gavetas", 1))
             
             # Frame para alturas de gavetas
             frame_alturas = ttk.Frame(frame_gavetas)
-            frame_alturas.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
+            frame_alturas.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
             
             entries_altura_gavetas = []
             num_gavetas = gabinete_seleccionado.get("num_gavetas", 1)
@@ -1288,6 +1563,9 @@ class AplicacionGabinetes:
                 gabinete_seleccionado["Cantidad"] = int(entry_cantidad.get())
                 gabinete_seleccionado["Espesor"] = float(entry_grosor.get())
                 
+                # Actualizar el estilo de slider
+                gabinete_seleccionado["Slider"] = combo_slider.get()
+                
                 # Si es gabinete con gavetas, actualizar info de gavetas
                 if gabinete_seleccionado["Estilo"] == "Base_Drawer":
                     gabinete_seleccionado["num_gavetas"] = int(entry_num_gavetas.get())
@@ -1302,9 +1580,13 @@ class AplicacionGabinetes:
                 
                 # Calcular nuevas piezas
                 if gabinete_seleccionado["Estilo"] == "Base_Drawer":
-                    piezas_nuevas = self.calcular_piezas(gabinete_seleccionado)
+                    piezas_nuevas = self.calcular_piezas_base_drawer(gabinete_seleccionado)
+                elif gabinete_seleccionado["Estilo"] == "Base_normal":
+                    piezas_nuevas = self.calcular_piezas_base_normal(gabinete_seleccionado)
+                elif gabinete_seleccionado["Estilo"] == "Wall_cabinet":
+                    piezas_nuevas = self.calcular_piezas_wall_cabinet(gabinete_seleccionado)
                 else:
-                    piezas_nuevas = self.calcular_piezas_basico(gabinete_seleccionado)
+                    piezas_nuevas = []  # Estilo no reconocido
                 
                 # Añadir relación con el gabinete
                 for pieza in piezas_nuevas:
@@ -1320,12 +1602,12 @@ class AplicacionGabinetes:
                 self.actualizar_visualizacion(gabinete_seleccionado)
                 self.actualizar_detalles(gabinete_seleccionado, piezas_nuevas)
                 self.actualizar_resumen_materiales()
+                self.autoguardar_datos()
                 
                 # Cerrar ventana
                 ventana_edicion.destroy()
                 
                 messagebox.showinfo("Éxito", f"Gabinete {id_gabinete} actualizado correctamente")
-                
             except ValueError as e:
                 messagebox.showerror("Error de Datos", f"Datos inválidos: {str(e)}")
         
@@ -1403,23 +1685,42 @@ class AplicacionGabinetes:
         self.frame_opciones_gavetas_editar.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
         self.frame_opciones_gavetas_editar.grid_remove()  # Inicialmente oculto
 
-        ttk.Label(self.frame_opciones_gavetas_editar, text="Número de Gavetas:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        # Combobox para seleccionar el estilo de slider
+        ttk.Label(self.frame_opciones_gavetas_editar, text="Estilo de Slider:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.combo_slider_editar = ttk.Combobox(self.frame_opciones_gavetas_editar, values=["Undermount", "Sidemount"], width=10)
+        self.combo_slider_editar.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+
+        ttk.Label(self.frame_opciones_gavetas_editar, text="Número de Gavetas:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
         self.entry_editar_num_gavetas = ttk.Spinbox(self.frame_opciones_gavetas_editar, from_=1, to=4, width=5)
-        self.entry_editar_num_gavetas.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        self.entry_editar_num_gavetas.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
         self.entry_editar_num_gavetas.set(1)
         self.entry_editar_num_gavetas.bind("<<Increment>>", self.actualizar_campos_gavetas_editar)
         self.entry_editar_num_gavetas.bind("<<Decrement>>", self.actualizar_campos_gavetas_editar)
+        
+        # Campo de entrada para la altura de la gaveta (inicialmente oculto)
+        self.frame_altura_gaveta = ttk.LabelFrame(self.frame_editar_gabinete, text="Opciones de Gavetas")
+        self.frame_altura_gaveta.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
+        self.frame_altura_gaveta.grid_remove()  # Ocultar por defecto
+        
+        # Combobox para seleccionar el estilo de slider
+        ttk.Label(self.frame_altura_gaveta, text="Estilo de Slider:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.combo_slider_editar1 = ttk.Combobox(self.frame_altura_gaveta, values=["Undermount", "Sidemount"], width=10)
+        self.combo_slider_editar1.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
 
+        ttk.Label(self.frame_altura_gaveta, text="Altura Gaveta (in):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.entry_editar_altura_gaveta = ttk.Entry(self.frame_altura_gaveta, width=10)
+        self.entry_editar_altura_gaveta.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
         # Contenedor para campos de altura de gavetas
         self.frame_alturas_gavetas_editar = ttk.Frame(self.frame_opciones_gavetas_editar)
-        self.frame_alturas_gavetas_editar.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
+        self.frame_alturas_gavetas_editar.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
 
         # Botón para guardar cambios
         self.btn_guardar_cambios = ttk.Button(self.frame_editar_gabinete, text="Guardar Cambios", command=self.guardar_cambios_gabinete)
         self.btn_guardar_cambios.grid(row=6, column=0, columnspan=2, padx=5, pady=10)
 
     def guardar_cambios_gabinete(self):
-        """Guarda los cambios realizados en el gabinete seleccionado"""
+        """Guarda los cambios realizados en el gabinete seleccionado."""
         seleccion = self.tree_gabinetes.selection()
         if not seleccion:
             messagebox.showwarning("Advertencia", "No hay gabinete seleccionado")
@@ -1447,8 +1748,17 @@ class AplicacionGabinetes:
             gabinete_seleccionado["Profundidad"] = float(self.entry_editar_profundidad.get())
             gabinete_seleccionado["Cantidad"] = int(self.entry_editar_cantidad.get())
             gabinete_seleccionado["Espesor"] = float(self.entry_editar_grosor.get())
+            
+            # Actualizar el estilo de slider
+            gabinete_seleccionado["Slider"] = self.combo_slider_editar.get()
+            gabinete_seleccionado["Slider"] = self.combo_slider_editar1.get()
 
-            # Si es un gabinete con gavetas, actualizar el número de gavetas y sus alturas
+            # Si es un gabinete "Base_normal", actualizar la altura de la gaveta
+            if gabinete_seleccionado["Estilo"] == "Base_normal":
+                altura_gaveta = float(self.entry_editar_altura_gaveta.get())
+                gabinete_seleccionado["altura_gaveta"] = altura_gaveta
+
+            # Si es un gabinete con gavetas (Base_Drawer), actualizar el número de gavetas y sus alturas
             if gabinete_seleccionado["Estilo"] == "Base_Drawer":
                 num_gavetas = int(self.entry_editar_num_gavetas.get())
                 gabinete_seleccionado["num_gavetas"] = num_gavetas
@@ -1457,31 +1767,36 @@ class AplicacionGabinetes:
                 for i, entry in enumerate(self.entries_altura_gavetas_editar):
                     if entry.get():
                         gabinete_seleccionado[f"high_drawer_{i}"] = float(entry.get())
-            
+
             # Recalcular piezas
             # Eliminar piezas actuales
             self.piezas = [p for p in self.piezas if p.get("gabinete_id") != id_gabinete]
-            
+
             # Calcular nuevas piezas
-            if gabinete_seleccionado["Estilo"] == "Base_Drawer":
-                piezas_nuevas = self.calcular_piezas(gabinete_seleccionado)
+            if gabinete_seleccionado["Estilo"] == "Base_normal":
+                piezas_nuevas = self.calcular_piezas_base_normal(gabinete_seleccionado)
+            elif gabinete_seleccionado["Estilo"] == "Base_Drawer":
+                piezas_nuevas = self.calcular_piezas_base_drawer(gabinete_seleccionado)
+            elif gabinete_seleccionado["Estilo"] == "Wall_cabinet":
+                piezas_nuevas = self.calcular_piezas_wall_cabinet(gabinete_seleccionado)
             else:
-                piezas_nuevas = self.calcular_piezas_basico(gabinete_seleccionado)
-            
+                piezas_nuevas = []  # Estilo no reconocido
+
             # Añadir relación con el gabinete
             for pieza in piezas_nuevas:
                 pieza["gabinete_id"] = gabinete_seleccionado["ID"]
                 pieza["grosor"] = gabinete_seleccionado["Espesor"]
-            
+
             # Agregar a la lista
             self.piezas.extend(piezas_nuevas)
-            
+
             # Actualizar UI
             self.actualizar_lista_gabinetes()
             self.actualizar_lista_piezas()
             self.actualizar_visualizacion(gabinete_seleccionado)
             self.actualizar_detalles(gabinete_seleccionado, piezas_nuevas)
             self.actualizar_resumen_materiales()
+            self.autoguardar_datos()
 
             messagebox.showinfo("Éxito", f"Gabinete {id_gabinete} actualizado correctamente")
         except ValueError as e:
@@ -1545,6 +1860,7 @@ class AplicacionGabinetes:
             self.actualizar_lista_piezas(id_gabinete)  # Actualizar solo las piezas del gabinete seleccionado
             self.actualizar_vista_frontal_pieza(pieza_seleccionada)
             self.actualizar_vista_lateral_pieza(pieza_seleccionada)
+            self.autoguardar_datos()
             messagebox.showinfo("Éxito", f"Pieza {nombre_pieza} actualizada correctamente")
         except ValueError as e:
             messagebox.showerror("Error de Datos", f"Datos inválidos: {str(e)}")
@@ -1557,6 +1873,8 @@ class AplicacionGabinetes:
         self.entry_editar_profundidad.delete(0, tk.END)
         self.entry_editar_cantidad.delete(0, tk.END)
         self.entry_editar_grosor.delete(0, tk.END)
+        self.combo_slider_editar.set("")  # Limpiar el combobox
+        self.combo_slider_editar1.set("")  # Limpiar el combobox
 
         # Llenar campos con los datos del gabinete
         self.entry_editar_alto.insert(0, str(gabinete["Alto"]))
@@ -1564,6 +1882,9 @@ class AplicacionGabinetes:
         self.entry_editar_profundidad.insert(0, str(gabinete["Profundidad"]))
         self.entry_editar_cantidad.insert(0, str(gabinete["Cantidad"]))
         self.entry_editar_grosor.insert(0, str(gabinete["Espesor"]))
+        self.entry_editar_altura_gaveta.delete(0, tk.END)
+        self.combo_slider_editar.set(gabinete.get("Slider", "Undermount"))  # Cargar el valor del slider
+        self.combo_slider_editar1.set(gabinete.get("Slider", "Undermount"))  # Cargar el valor del slider
 
         # Si es un gabinete con gavetas, actualizar el número y mostrar el frame de opciones
         if gabinete["Estilo"] == "Base_Drawer":
@@ -1582,6 +1903,13 @@ class AplicacionGabinetes:
         else:
             # Ocultar frame de opciones de gavetas
             self.frame_opciones_gavetas_editar.grid_remove()
+            
+        # Si es un gabinete "Base_normal", mostrar el campo de altura de la gaveta
+        if gabinete["Estilo"] == "Base_normal":
+            self.frame_altura_gaveta.grid()  # Mostrar el frame de altura de la gaveta
+            self.entry_editar_altura_gaveta.insert(0, str(gabinete.get("altura_gaveta", 6)))  # Valor predeterminado: 6 cm
+        else:
+            self.frame_altura_gaveta.grid_remove()  # Ocultar el frame de altura de la gaveta
 
     def reiniciar_valores_modificados(self):
         """Reinicia la lista de valores modificados y oculta los check marks"""
@@ -1597,6 +1925,34 @@ class AplicacionGabinetes:
             label.config(text="")  # Ocultar los check marks
         self.actualizar_campos_gavetas_editar1()  # Recalcular los campos
         
+    def cargar_proyecto_anterior(self):
+        """Pregunta al usuario si desea cargar el proyecto anterior y carga los datos si es necesario"""
+        if os.path.exists(self.archivo_temp):  # Verificar si el archivo temporal existe
+            respuesta = messagebox.askyesno(
+                "Recuperar proyecto anterior",
+                "Se encontró un proyecto guardado temporalmente. ¿Deseas recuperarlo?"
+            )
+
+            if respuesta:  # Si el usuario acepta
+                try:
+                    with open(self.archivo_temp, "r") as archivo:
+                        datos = json.load(archivo)
+                    
+                    # Cargar los datos del archivo temporal
+                    self.gabinetes = datos.get("gabinetes", [])
+                    self.piezas = datos.get("piezas", [])
+
+                    # Actualizar la interfaz con los datos cargados
+                    self.actualizar_lista_gabinetes()
+                    self.actualizar_lista_piezas()
+                    self.actualizar_resumen_materiales()
+
+                    messagebox.showinfo("Éxito", "Proyecto anterior cargado correctamente.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo cargar el proyecto anterior: {str(e)}")
+        else:
+            print("No se encontró un proyecto anterior para cargar.")
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = AplicacionGabinetes(root)
